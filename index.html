@@ -745,7 +745,8 @@ async function generateDocx() {
 
         const clientReqsText = [];
         if (clientRequisites.type === 'ip') {
-            clientReqsText.push({ text: `Клиент: ${clientRequisites.name}`, bold: true });
+            // ИЗМЕНЕНИЕ ЗДЕСЬ: Добавлено "ИП " перед ФИО
+            clientReqsText.push({ text: `Клиент: ИП ${clientRequisites.name}`, bold: true });
             clientReqsText.push({ text: `Юридический адрес: ${clientRequisites.legalAddress}`, bold: false });
             clientReqsText.push({ text: `Почтовый адрес: ${clientRequisites.postalAddress}`, bold: false });
             clientReqsText.push({ text: `ОГРНИП: ${clientRequisites.ogrnip}`, bold: false });
