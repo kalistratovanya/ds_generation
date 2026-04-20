@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Генератор корректировки актов</title>
+    <style>
+        :root { --primary: #2563eb; --success: #16a34a; --bg: #f8fafc; --card: #ffffff; --danger: #ef4444; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; 
+            background: linear-gradient(135deg, #0055ff 0%, #0055ff 20%, #bd76f0 60%, #fc5665 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            padding: 20px; 
+            color: #1e293b; 
+            line-height: 1.5; 
+        }
+        .container { max-width: 850px; margin: 0 auto; background: var(--card); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.15); padding: 30px; }
+        h1 { text-align: center; margin-bottom: 8px; font-size: 22px; color: #0f172a; }
+        
+        .section { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+        .section-title { font-weight: 600; margin-bottom: 12px; color: #0f172a; display: flex; align-items: center; gap: 8px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        label { font-size: 13px; font-weight: 500; color: #475569; }
+        input, select { padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; transition: 0.2s; width: 100%; }
+        input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+        input::placeholder { color: #94a3b8; }
+        input[readonly] { background: #e2e8f0; color: #64748b; cursor: not-allowed; }
+        .hint { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+        .svc-block { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+        .hidden { display: none; }
+
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: 0.2s; margin-top: 10px; }
+        .btn-calc { background: var(--primary); color: white; }
+        .btn-calc:hover { background: #1d4ed8; }
+        .btn-dl { background: var(--success); color: white; display: none; }
+        .btn-dl:hover { background: #15803d; }
+        .btn-add { background: #64748b; color: white; margin-top: 0; }
+        .btn-add:hover { background: #475569; }
+        .btn-add-svc { background: transparent; border: 2px dashed #cbd5e1; color: #64748b; padding: 8px; font-size: 13px; margin-top: 5px; cursor: pointer; }
+        .btn-add-svc:hover { background: #f1f5f9; border-color: var(--primary); color: var(--primary); }
+        .btn-remove { background: transparent; border: 1px solid var(--danger); color: var(--danger); padding: 6px 12px; font-size: 13px; width: auto; margin: 0; cursor: pointer; }
+        .btn-remove:hover { background: var(--danger); color: white; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        
+        .error { background: #fee2e2; color: #b91c1c; padding: 12px; border-radius: 8px; margin-top: 15px; display: none; border-left: 4px solid #b91c1c; font-size: 13px; }
+        .error.show { display: block; animation: shake 0.3s; }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+        
+        .result-box { background: #ecfdf5; border-left: 4px solid var(--success); padding: 12px; border-radius: 8px; margin-top: 15px; display: none; font-size: 13px; white-space: pre-line; }
+        .result-box.show { display: block; }
+        .lib-status { text-align: center; font-size: 12px; margin-top: 10px; color: #64748b; }
+        .lib-status.ok { color: #16a34a; }
+        .lib-status.err { color: #dc2626; }
+        @media(max-width:600px) { .container { padding: 15px; } .grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📄 Генератор корректировки актов</h1>
+
+    <div class="section">
+        <div class="section-title">📜 Договор и стороны</div>
+        <div class="grid">
+            <div class="form-group" style="grid-column: span 2;">
+                <label>№ Договора (формат: 2024/10/11-...)</label>
+                <input type="text" id="contractNum" placeholder="2024/10/11-1164631-smb" oninput="extractContractDate()">
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+                <label>Дата договора (авто)</label>
+                <input type="text" id="contractDate" readonly>
+            </div>
+            <div class="form-group">
+                <label>Тип клиента</label>
+                <select id="clientType" onchange="toggleClientFields()">
+                    <option value="ooo">ООО</option>
+                    <option value="ip">ИП</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- ООО Группа -->
+        <div id="oooGroup" class="grid" style="margin-top:10px;">
+            <div class="form-group" style="grid-column: span 2;"><label>Наименование ООО (краткое)</label><input type="text" id="oooName" placeholder="ООО «РЭЙ»"></div>
+            <div class="form-group">
+                <label>Должность руководителя</label>
+                <select id="oooPosition" onchange="toggleDirectorField()">
+                    <option value="Генерального директора">Генеральный директор</option>
+                    <option value="Директора">Директор</option>
+                    <option value="other">Другая должность</option>
+                </select>
+            </div>
+            <div class="form-group hidden" id="otherPositionGroup">
+                <label>Должность (в родительном падеже, для текста)</label>
+                <input type="text" id="otherPositionGenitive" placeholder="например: Генерального директора">
+            </div>
+            <div class="form-group hidden" id="otherPositionGroupNom">
+                <label>Должность (в именительном падеже, для подписи)</label>
+                <input type="text" id="otherPositionNominative" placeholder="например: Генеральный директор">
+            </div>
+            <div class="form-group" style="grid-column: span 2;"><label>ФИО руководителя (Р.п.)</label><input type="text" id="oooDirectorGenitive" placeholder="Иванова Ивана Ивановича"></div>
+            <div class="form-group" style="grid-column: span 2;"><label>ФИО руководителя (И.п.)</label><input type="text" id="oooDirectorNominative" placeholder="Иванов Иван Иванович"></div>
+        </div>
+        
+        <!-- ИП Группа -->
+        <div id="ipGroup" class="grid" style="margin-top:10px; display:none;">
+            <div class="form-group" style="grid-column: span 2;"><label>ФИО ИП (И.п.)</label><input type="text" id="ipName" placeholder="Иванов Иван Иванович"></div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">📋 Корректируемые акты <span style="font-weight:400;color:#64748b; font-size:13px;">(макс. 15)</span></div>
+        <div id="actsContainer"></div>
+        <button id="addActBtn" class="btn btn-add" onclick="addAct()">➕ Добавить акт</button>
+    </div>
+
+    <div class="section" id="clientRequisitesSection" style="display:none;">
+        <div class="section-title">📝 Реквизиты клиента</div>
+        <div id="oooRequisites" class="grid">
+            <div class="form-group" style="grid-column: span 2;"><label>Юридический адрес</label><input type="text" id="oooLegalAddress" placeholder="119021, г. Москва, ул. Льва Толстого, дом 16, пом. 2106"></div>
+            <div class="form-group" style="grid-column: span 2;"><label>Почтовый адрес</label><input type="text" id="oooPostalAddress" placeholder="115035, г. Москва, ул. Садовническая, д. 82, стр. 2"></div>
+            <div class="form-group"><label>ОГРН</label><input type="text" id="oooOGRN" placeholder="1167746266819"></div>
+            <div class="form-group"><label>ИНН</label><input type="text" id="oooINN" placeholder="7713412899"></div>
+            <div class="form-group"><label>КПП</label><input type="text" id="oooKPP" placeholder="770401001"></div>
+            <div class="form-group" style="grid-column: span 2;"><label>Р/с №</label><input type="text" id="oooAccount" placeholder="40702810800020001082"></div>
+            <div class="form-group" style="grid-column: span 2;"><label>в</label><input type="text" id="oooBank" placeholder="ПАО Сбербанк"></div>
+            <div class="form-group"><label>К/с</label><input type="text" id="oooCorrespondent" placeholder="30101810400000000225"></div>
+            <div class="form-group"><label>БИК</label><input type="text" id="oooBIK" placeholder="044525225"></div>
+            <div class="form-group" style="grid-column: span 2;"><label>E-mail</label><input type="email" id="oooEmail" placeholder="milo@elama.ru"></div>
+        </div>
+        <div id="ipRequisites" class="grid" style="display:none;">
+            <div class="form-group" style="grid-column: span 2;"><label>Юридический адрес</label><input type="text" id="ipLegalAddress" placeholder="119021, г. Москва, ул. Примерная, д. 1"></div>
+            <div class="form-group" style="grid-column: span 2;"><label>Почтовый адрес</label><input type="text" id="ipPostalAddress" placeholder="115035, г. Москва, ул. Примерная, д. 1"></div>
+            <div class="form-group"><label>ОГРНИП</label><input type="text" id="ipOGRNIP" placeholder="312774612345678"></div>
+            <div class="form-group"><label>ИНН</label><input type="text" id="ipINN" placeholder="771234567890"></div>
+            <div class="form-group" style="grid-column: span 2;"><label>Р/с №</label><input type="text" id="ipAccount" placeholder="40702810000000000000"></div>
+            <div class="form-group" style="grid-column: span 2;"><label>в</label><input type="text" id="ipBank" placeholder="ПАО Сбербанк"></div>
+            <div class="form-group"><label>К/с</label><input type="text" id="ipCorrespondent" placeholder="30101810000000000000"></div>
+            <div class="form-group"><label>БИК</label><input type="text" id="ipBIK" placeholder="044525000"></div>
+            <div class="form-group" style="grid-column: span 2;"><label>E-mail</label><input type="email" id="ipEmail" placeholder="example@mail.ru"></div>
+        </div>
+    </div>
+
+    <button class="btn btn-calc" onclick="calculate()">🧮 Рассчитать всё</button>
+    <button class="btn btn-dl" id="btnDl" onclick="generateDocx()" disabled>📥 Скачать документ Word (.docx)</button>
+    <div class="lib-status" id="libStatus">⏳ Загрузка библиотек...</div>
+    <div class="error" id="err"></div>
+    <div class="result-box" id="preview"></div>
+</div>
+
+<script>
+// === ЗАГРУЗКА БИБЛИОТЕК ===
+function loadScript(url) {
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = url; s.crossOrigin = 'anonymous';
+        s.onload = resolve; s.onerror = () => reject(new Error(url));
+        document.head.appendChild(s);
+    });
+}
+
+let librariesReady = false;
+let actCounter = 0;
+
+(async function initLibs() {
+    const status = document.getElementById('libStatus');
+    try {
+        await loadScript('https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js').catch(() => 
+            loadScript('https://unpkg.com/docx@8.5.0/build/index.umd.min.js'));
+        await loadScript('https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js').catch(() => 
+            loadScript('https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js'));
+        if (window.docx && window.saveAs) {
+            librariesReady = true;
+            status.textContent = '✅ Библиотеки готовы.';
+            status.className = 'lib-status ok';
+            addAct();
+        } else throw new Error('Библиотеки не инициализировались.');
+    } catch (e) {
+        status.textContent = '❌ Ошибка загрузки. Проверьте интернет.';
+        status.className = 'lib-status err';
+    }
+})();
+
+// === УТИЛИТЫ ===
+const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+const parseNum = (str) => { const c = String(str||'').replace(',','.').replace(/\s/g,''); return isNaN(parseFloat(c)) ? 0 : parseFloat(c); };
+const fmt = (n) => n.toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+const toWords = (num) => {
+    if(num === 0) return "ноль рублей 00 копеек";
+    const rub = Math.floor(num), kop = Math.round((num - rub) * 100), kopStr = kop.toString().padStart(2, '0');
+    const u=["","один","два","три","четыре","пять","шесть","семь","восемь","девять"];
+    const t=["","десять","двадцать","тридцать","сорок","пятьдесят","шестьдесят","семьдесят","восемьдесят","девяносто"];
+    const h=["","сто","двести","триста","четыреста","пятьсот","шестьсот","семьсот","восемьсот","девятьсот"];
+    const teens=["десять","одиннадцать","двенадцать","тринадцать","четырнадцать","пятнадцать","шестнадцать","семнадцать","восемнадцать","девятнадцать"];
+    const f1=["тысяча","тысячи","тысяч"], f10=["миллион","миллиона","миллионов"], f100=["миллиард","миллиарда","миллиардов"];
+    const rubF=["рубль","рубля","рублей"];
+    const decl = (n, f) => { const m=n%100; return f[(m>4&&m<21)?m%10===1?0:m%10>1&&m%10<5?1:2 : (n%10===1?0:n%10>1&&n%10<5?1:2)]; };
+    const trip = (n, f, isK=false) => {
+        if(n===0) return "";
+        let r=[], hn=Math.floor(n/100), tn=Math.floor(n%100/10), un=n%10;
+        if(hn) r.push(h[hn]);
+        if(tn===1) r.push(teens[un]);
+        else { if(tn>1) r.push(t[tn]); if(un>0) r.push(isK?(un===1?"одна":un===2?"две":u[un]):u[un]); }
+        return r.join(" ") + " " + decl(n, f);
+    };
+    let p = [];
+    if(rub>=1e9) p.push(trip(Math.floor(rub/1e9), f100));
+    if(rub%1e9>=1e6) p.push(trip(Math.floor(rub%1e9/1e6), f10));
+    if(rub%1e6>=1e3) p.push(trip(Math.floor(rub%1e6/1e3), f1, true));
+    if(rub%1e3>0 || p.length===0) p.push(trip(rub%1e3, rubF));
+    let res = p.join(" ").replace(/\s+/g,' ').trim() + " " + kopStr + " копеек";
+    return res.charAt(0).toUpperCase() + res.slice(1);
+};
+
+function extractContractDate() {
+    const num = document.getElementById('contractNum').value;
+    const match = num.match(/(\d{4})\/(\d{2})\/(\d{2})/);
+    document.getElementById('contractDate').value = match ? `${match[3]}.${match[2]}.${match[1]} г.` : '';
+}
+
+function toggleClientFields() {
+    const type = document.getElementById('clientType').value;
+    document.getElementById('oooGroup').style.display = type === 'ooo' ? 'grid' : 'none';
+    document.getElementById('ipGroup').style.display = type === 'ip' ? 'grid' : 'none';
+    document.getElementById('clientRequisitesSection').style.display = 'block';
+    document.getElementById('oooRequisites').style.display = type === 'ooo' ? 'grid' : 'none';
+    document.getElementById('ipRequisites').style.display = type === 'ip' ? 'grid' : 'none';
+}
+
+function toggleDirectorField() {
+    const position = document.getElementById('oooPosition').value;
+    const otherGen = document.getElementById('otherPositionGroup');
+    const otherNom = document.getElementById('otherPositionGroupNom');
+    if (position === 'other') {
+        otherGen.classList.remove('hidden');
+        otherNom.classList.remove('hidden');
+    } else {
+        otherGen.classList.add('hidden');
+        otherNom.classList.add('hidden');
+    }
+}
+
+// === УПРАВЛЕНИЕ АКТАМИ И УСЛУГАМИ ===
+function createServiceBlock(actNum, serviceNum) {
+    const div = document.createElement('div');
+    div.className = 'svc-block';
+    div.dataset.svc = serviceNum;
+    div.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div class="section-title" style="font-size:14px; margin:0;">Услуга ${serviceNum}</div>
+            ${serviceNum > 1 ? '<button class="btn btn-remove" type="button">✕</button>' : ''}
+        </div>
+        <div class="grid">
+            <div class="form-group" style="grid-column: span 2;"><label>Наименование</label><input type="text" class="svc-name" placeholder="Услуга ${serviceNum}"></div>
+            <div class="form-group"><label>Сумма (без НДС, ₽)</label><input type="text" class="svc-base" placeholder="4 918,03"></div>
+            <div class="form-group"><label>Корректировка (с НДС, ₽)</label><input type="text" class="svc-adj" placeholder="500,00"></div>
+        </div>
+    `;
+    
+    if (serviceNum > 1) {
+        const removeBtn = div.querySelector('.btn-remove');
+        removeBtn.onclick = () => removeService(actNum, serviceNum, div);
+    }
+    
+    return div;
+}
+
+function addService(actNum) {
+    const block = document.querySelector(`.act-section[data-act="${actNum}"]`);
+    if (!block) return;
+    
+    const servicesContainer = block.querySelector('.services-container');
+    const currentServices = block.querySelectorAll('.svc-block').length;
+    
+    if (currentServices >= 4) {
+        alert('Достигнут лимит в 4 услуги');
+        return;
+    }
+    
+    const nextServiceNum = currentServices + 1;
+    const svcBlock = createServiceBlock(actNum, nextServiceNum);
+    servicesContainer.appendChild(svcBlock);
+}
+
+function removeService(actNum, serviceNum, block) {
+    if (block) block.remove();
+    
+    const actBlock = document.querySelector(`.act-section[data-act="${actNum}"]`);
+    const services = actBlock.querySelectorAll('.svc-block');
+    services.forEach((svc, idx) => {
+        const title = svc.querySelector('.section-title');
+        if (title) title.textContent = `Услуга ${idx + 1}`;
+        svc.dataset.svc = idx + 1;
+    });
+}
+
+function addAct() {
+    if (actCounter >= 15) return;
+    actCounter++;
+    const n = actCounter;
+    
+    const block = document.createElement('div');
+    block.className = 'section act-section';
+    block.dataset.act = n;
+    
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'section-title';
+    titleDiv.innerHTML = `💰 Акт № ${n}`;
+    
+    if (n > 1) {
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'btn btn-remove';
+        removeBtn.textContent = '✕ Удалить';
+        removeBtn.onclick = () => removeAct(n);
+        titleDiv.appendChild(removeBtn);
+    }
+    
+    const actInfoGroup = document.createElement('div');
+    actInfoGroup.className = 'grid';
+    actInfoGroup.style.marginBottom = '12px';
+    actInfoGroup.innerHTML = `
+        <div class="form-group">
+            <label>№ Акта</label>
+            <input type="text" class="act-number" placeholder="240467781">
+        </div>
+        <div class="form-group">
+            <label>Дата акта</label>
+            <input type="date" class="act-date">
+        </div>
+        <div class="form-group">
+            <label>Ставка НДС</label>
+            <select class="act-vat-rate">
+                <option value="20">20%</option>
+                <option value="22" selected>22%</option>
+            </select>
+        </div>
+    `;
+    
+    const formGroup = document.createElement('div');
+    formGroup.className = 'form-group';
+    formGroup.style.marginBottom = '12px';
+    formGroup.innerHTML = '<label>Итоговая сумма акта (с НДС, ₽)</label>';
+    const totalInput = document.createElement('input');
+    totalInput.type = 'text';
+    totalInput.className = 'act-total';
+    totalInput.placeholder = '6 000,00';
+    formGroup.appendChild(totalInput);
+    
+    const servicesContainer = document.createElement('div');
+    servicesContainer.className = 'services-container';
+    
+    const addSvcBtn = document.createElement('button');
+    addSvcBtn.className = 'btn btn-add-svc';
+    addSvcBtn.textContent = '+ Добавить услугу';
+    addSvcBtn.onclick = function() { addService(n); };
+    
+    const addSvcContainer = document.createElement('div');
+    addSvcContainer.className = 'add-svc-container';
+    addSvcContainer.appendChild(addSvcBtn);
+    
+    block.appendChild(titleDiv);
+    block.appendChild(actInfoGroup);
+    block.appendChild(formGroup);
+    block.appendChild(servicesContainer);
+    block.appendChild(addSvcContainer);
+    
+    document.getElementById('actsContainer').appendChild(block);
+    
+    const firstService = createServiceBlock(n, 1);
+    servicesContainer.appendChild(firstService);
+    
+    document.getElementById('addActBtn').disabled = actCounter >= 15;
+}
+
+function removeAct(n) {
+    const block = document.querySelector(`.act-section[data-act="${n}"]`);
+    if (block) block.remove();
+}
+
+let calcData = null;
+
+function calculate() {
+    if(!librariesReady) return alert("Подождите загрузки библиотек.");
+    const err = document.getElementById('err'), btn = document.getElementById('btnDl'), prev = document.getElementById('preview');
+    err.classList.remove('show'); btn.style.display = 'none'; prev.classList.remove('show');
+    
+    try {
+        const contractNum = document.getElementById('contractNum').value.trim();
+        const contractDate = document.getElementById('contractDate').value;
+        const clientType = document.getElementById('clientType').value;
+        
+        if(!contractNum) throw new Error("Укажите номер договора");
+        if(!contractDate) throw new Error("Не удалось распознать дату в номере договора");
+
+        const acts = [];
+        document.querySelectorAll('.act-section').forEach(block => {
+            const n = block.dataset.act;
+            const actNumber = block.querySelector('.act-number').value.trim();
+            const actDateInput = block.querySelector('.act-date').value;
+            const vatRate = parseInt(block.querySelector('.act-vat-rate').value);
+            const totalIncl = round2(parseNum(block.querySelector('.act-total').value));
+            
+            if(!actNumber) throw new Error(`Акт № ${n}: укажите номер акта`);
+            if(!actDateInput) throw new Error(`Акт № ${n}: укажите дату акта`);
+            if(totalIncl <= 0) throw new Error(`Акт № ${n}: итоговая сумма должна быть больше 0`);
+
+            const actDateObj = new Date(actDateInput);
+            const actDateFormatted = actDateObj.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+
+            const vatMultiplier = 1 + vatRate / 100;
+            const origBase = round2(totalIncl / vatMultiplier);
+            const origVat = round2(totalIncl - origBase);
+
+            const services = [];
+            block.querySelectorAll('.svc-block').forEach((svcBlock, idx) => {
+                const s = idx + 1;
+                const svc = {
+                    name: svcBlock.querySelector('.svc-name').value.trim() || `Услуга ${s}`,
+                    base: round2(parseNum(svcBlock.querySelector('.svc-base').value)),
+                    adj: round2(parseNum(svcBlock.querySelector('.svc-adj').value))
+                };
+                if (svc.base > 0 || svc.adj > 0) services.push(svc);
+            });
+
+            if(!services.length) throw new Error(`Акт № ${n}: заполните хотя бы одну услугу`);
+            services.forEach(s => { if(s.adj < 0) throw new Error(`Акт № ${n}: корректировка не может быть отрицательной`); });
+            
+            const sumBase = round2(services.reduce((a,s) => a + s.base, 0));
+            if(sumBase > totalIncl + 0.01) throw new Error(`Акт № ${n}: сумма баз услуг превышает итоговую сумму`);
+
+            services.forEach(s => {
+                s.adjBase = round2(s.adj / vatMultiplier);
+                s.newBase = round2(s.base - s.adjBase);
+            });
+            
+            const newTotalIncl = round2(totalIncl - services.reduce((a,s) => a + s.adj, 0));
+            const newSumBase = round2(services.reduce((a,s) => a + s.newBase, 0));
+            const newVat = round2(newTotalIncl - newSumBase);
+
+            acts.push({ 
+                id: n, 
+                actNumber: actNumber,
+                actDate: actDateFormatted,
+                vatRate: vatRate,
+                services, 
+                orig: { base: origBase, vat: origVat, incl: totalIncl }, 
+                new: { base: newSumBase, vat: newVat, incl: newTotalIncl } 
+            });
+        });
+
+        if(!acts.length) throw new Error("Добавьте хотя бы один акт");
+
+        let clientRequisites = {};
+        if (clientType === 'ip') {
+            const ipName = document.getElementById('ipName').value.trim();
+            if(!ipName) throw new Error("Укажите ФИО ИП");
+            clientRequisites = {
+                name: ipName,
+                legalAddress: document.getElementById('ipLegalAddress').value.trim(),
+                postalAddress: document.getElementById('ipPostalAddress').value.trim(),
+                ogrnip: document.getElementById('ipOGRNIP').value.trim(),
+                inn: document.getElementById('ipINN').value.trim(),
+                account: document.getElementById('ipAccount').value.trim(),
+                bank: document.getElementById('ipBank').value.trim(),
+                correspondent: document.getElementById('ipCorrespondent').value.trim(),
+                bik: document.getElementById('ipBIK').value.trim(),
+                email: document.getElementById('ipEmail').value.trim(),
+                type: 'ip'
+            };
+        } else {
+            const oooNameShort = document.getElementById('oooName').value.trim();
+            const oooPosition = document.getElementById('oooPosition').value;
+            const oooDirectorGenitive = document.getElementById('oooDirectorGenitive').value.trim();
+            const oooDirectorNominative = document.getElementById('oooDirectorNominative').value.trim();
+            
+            if(!oooNameShort) throw new Error("Укажите наименование ООО");
+            if(!oooDirectorGenitive) throw new Error("Укажите ФИО руководителя (Р.п.)");
+            if(!oooDirectorNominative) throw new Error("Укажите ФИО руководителя (И.п.)");
+            
+            let positionGenitive = oooPosition;
+            let positionNominative = oooPosition === 'Генерального директора' ? 'Генеральный директор' : 
+                                     oooPosition === 'Директора' ? 'Директор' : '';
+            
+            if (oooPosition === 'other') {
+                positionGenitive = document.getElementById('otherPositionGenitive').value.trim();
+                positionNominative = document.getElementById('otherPositionNominative').value.trim();
+                if(!positionGenitive || !positionNominative) throw new Error("Укажите должность руководителя");
+            }
+            
+            clientRequisites = {
+                nameShort: oooNameShort,
+                positionGenitive: positionGenitive,
+                positionNominative: positionNominative,
+                directorGenitive: oooDirectorGenitive,
+                directorNominative: oooDirectorNominative,
+                legalAddress: document.getElementById('oooLegalAddress').value.trim(),
+                postalAddress: document.getElementById('oooPostalAddress').value.trim(),
+                ogrn: document.getElementById('oooOGRN').value.trim(),
+                inn: document.getElementById('oooINN').value.trim(),
+                kpp: document.getElementById('oooKPP').value.trim(),
+                account: document.getElementById('oooAccount').value.trim(),
+                bank: document.getElementById('oooBank').value.trim(),
+                correspondent: document.getElementById('oooCorrespondent').value.trim(),
+                bik: document.getElementById('oooBIK').value.trim(),
+                email: document.getElementById('oooEmail').value.trim(),
+                type: 'ooo'
+            };
+        }
+
+        calcData = { 
+            contractNum, 
+            contractDate, 
+            clientRequisites,
+            moscowDate: new Date().toLocaleDateString('ru-RU'), 
+            acts 
+        };
+        
+        let summary = `✅ Расчёт выполнен\nАктов: ${acts.length}`;
+        acts.forEach(a => summary += `\nАкт № ${a.actNumber} от ${a.actDate} (НДС ${a.vatRate}%): ${fmt(a.orig.incl)} ₽ → ${fmt(a.new.incl)} ₽`);
+        prev.innerHTML = summary;
+        prev.classList.add('show'); btn.style.display = 'block'; btn.disabled = false;
+    } catch(e) {
+        err.textContent = "❌ " + e.message; err.classList.add('show');
+    }
+}
+
+async function generateDocx() {
+    if(!calcData || !librariesReady) return;
+    const btn = document.getElementById('btnDl');
+    const origTxt = btn.textContent; btn.textContent = '⏳ Генерация...'; btn.disabled = true;
+
+    try {
+        const { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, TextRun, LineRuleType } = window.docx;
+        if(!Document) throw new Error("docx не загружен");
+
+        const { contractNum, contractDate, clientRequisites, moscowDate, acts } = calcData;
+        
+        const tr = (text, bold=false) => new TextRun({ text, bold, size: 20, font: "Times New Roman" });
+        
+        const borderNone = { style: BorderStyle.NONE, size: 0, color: "000000" };
+        const borderSingle = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
+        const borderThick = { style: BorderStyle.SINGLE, size: 12, color: "000000" };
+
+        const paraStyle = { spacing: { line: 360, lineRule: LineRuleType.AUTO } };
+
+        const createCell = (text, bold=false, borders, align=AlignmentType.LEFT, widthPercent=70) => {
+            return new TableCell({
+                borders: borders,
+                width: {size: widthPercent, type: WidthType.PERCENTAGE},
+                children: [
+                    new Paragraph({
+                        alignment: align,
+                        ...paraStyle,
+                        children: [tr(text, bold)]
+                    })
+                ]
+            });
+        };
+
+        const makeTable = (act, isNew=false) => {
+            const rows = [];
+            const borderAll = { top: borderSingle, bottom: borderSingle, left: borderSingle, right: borderSingle };
+            
+            rows.push(new TableRow({
+                children: [
+                    createCell("Наименование товара, работы, услуги", true, borderAll, AlignmentType.LEFT, 70),
+                    createCell("Сумма, руб.", true, borderAll, AlignmentType.RIGHT, 30)
+                ]
+            }));
+
+            const services = act.services;
+            const bases = services.map(s => isNew ? s.newBase : s.base);
+            
+            services.forEach((s) => {
+                rows.push(new TableRow({
+                    children: [
+                        createCell(s.name, false, borderAll, AlignmentType.LEFT, 70),
+                        createCell(fmt(bases[services.indexOf(s)]), false, borderAll, AlignmentType.RIGHT, 30)
+                    ]
+                }));
+            });
+
+            rows.push(new TableRow({
+                children: [
+                    createCell("Итого:", true, borderAll, AlignmentType.RIGHT, 70),
+                    createCell(fmt(isNew ? act.new.base : act.orig.base), true, borderAll, AlignmentType.RIGHT, 30)
+                ]
+            }));
+
+            rows.push(new TableRow({
+                children: [
+                    createCell("Итого НДС:", true, borderAll, AlignmentType.RIGHT, 70),
+                    createCell(fmt(isNew ? act.new.vat : act.orig.vat), true, borderAll, AlignmentType.RIGHT, 30)
+                ]
+            }));
+
+            rows.push(new TableRow({
+                children: [
+                    createCell("Всего по акту:", true, borderAll, AlignmentType.RIGHT, 70),
+                    createCell(fmt(isNew ? act.new.incl : act.orig.incl), true, borderAll, AlignmentType.RIGHT, 30)
+                ]
+            }));
+
+            return rows;
+        };
+
+        const children = [];
+
+        children.push(new Paragraph({ 
+            alignment: AlignmentType.CENTER, 
+            children: [tr("ДОПОЛНИТЕЛЬНОЕ СОГЛАШЕНИЕ №1", true)], 
+            spacing: { after: 0 } 
+        }));
+
+        children.push(new Paragraph({ 
+            alignment: AlignmentType.CENTER, 
+            children: [tr(`к Договору № ${contractNum} от ${contractDate}`, true)], 
+            spacing: { after: 0 } 
+        }));
+
+        children.push(new Paragraph({ 
+            alignment: AlignmentType.RIGHT, 
+            children: [tr(moscowDate)], 
+            spacing: { after: 0 } 
+        }));
+        children.push(new Paragraph({ 
+            alignment: AlignmentType.RIGHT, 
+            children: [tr("г. Москва")], 
+            spacing: { after: 300 } 
+        }));
+
+        const bodyParaStyle = {
+            indent: { firstLine: 720 },
+            alignment: AlignmentType.JUSTIFIED,
+            spacing: { after: 100 }
+        };
+
+        children.push(new Paragraph({ 
+            ...bodyParaStyle,
+            children: [
+                tr("Общество с ограниченной ответственностью «СМБ-Сервис»", true),
+                tr(", в лице Генерального директора, Андреева Ильи Николаевича, действующего на основании Устава, именуемое в дальнейшем «", false),
+                tr("Компания", true),
+                tr("», с одной стороны и", false)
+            ] 
+        }));
+
+        const clientTextParts = [];
+        if (clientRequisites.type === 'ip') {
+            clientTextParts.push(tr("Индивидуальный предприниматель ", false));
+            clientTextParts.push(tr(clientRequisites.name, true));
+            clientTextParts.push(tr(", именуемый в дальнейшем «", false));
+            clientTextParts.push(tr("Клиент", true));
+            clientTextParts.push(tr("», с другой стороны, при совместном упоминании именуемые «", false));
+            clientTextParts.push(tr("Стороны", true));
+            clientTextParts.push(tr("»", false));
+        } else {
+            clientTextParts.push(tr(clientRequisites.nameShort, true));
+            clientTextParts.push(tr(`, в лице ${clientRequisites.positionGenitive}, ${clientRequisites.directorGenitive}, действующего на основании Устава, именуемое в дальнейшем «`, false));
+            clientTextParts.push(tr("Клиент", true));
+            clientTextParts.push(tr("», с другой стороны, при совместном упоминании именуемые «", false));
+            clientTextParts.push(tr("Стороны", true));
+            clientTextParts.push(tr("»", false));
+        }
+
+        children.push(new Paragraph({ 
+            ...bodyParaStyle,
+            children: clientTextParts 
+        }));
+
+        children.push(new Paragraph({ 
+            ...bodyParaStyle,
+            spacing: { after: 300 },
+            children: [
+                tr(`заключили настоящее дополнительное соглашение к Договору № ${contractNum} от ${contractDate} (далее - Договор) о нижеследующем:`)
+            ] 
+        }));
+
+        acts.forEach((act, index) => {
+            children.push(new Paragraph({ 
+                children: [tr(`${index + 1}. Содержание Акта № ${act.actNumber} от ${act.actDate}.`)],
+                spacing: { after: 200 } 
+            }));
+
+            children.push(new Paragraph({ 
+                ...bodyParaStyle,
+                children: [
+                    tr(`Стоимость услуг по данному акту (с учетом скидки) составляет ${fmt(act.orig.incl)} рублей (${toWords(act.orig.incl)}), в том числе НДС ${fmt(act.orig.vat)} рублей (${toWords(act.orig.vat)}).`)
+                ]
+            }));
+
+            children.push(new Paragraph({ spacing: { after: 200 } }));
+            
+            children.push(new Table({ 
+                width: {size:100, type:WidthType.PERCENTAGE}, 
+                rows: makeTable(act, false) 
+            }));
+            
+            children.push(new Paragraph({ 
+                spacing: { before: 300, after: 200 }, 
+                children: [tr("Изложить в новой редакции:", true)] 
+            }));
+
+            children.push(new Paragraph({ 
+                ...bodyParaStyle,
+                children: [
+                    tr(`Стоимость услуг по данному акту (с учетом скидки) составляет ${fmt(act.new.incl)} (${toWords(act.new.incl)}), в том числе НДС ${fmt(act.new.vat)} (${toWords(act.new.vat)}).`)
+                ]
+            }));
+
+            children.push(new Paragraph({ spacing: { after: 200 } }));
+            
+            children.push(new Table({ 
+                width: {size:100, type:WidthType.PERCENTAGE}, 
+                rows: makeTable(act, true) 
+            }));
+
+            if (index < acts.length - 1) {
+                children.push(new Paragraph({ children: [], pageBreakBefore: true }));
+            }
+        });
+
+        children.push(new Paragraph({ spacing: { before: 200 } }));
+
+        const companyRequisites = [
+            { text: "Компания: ООО «СМБ-Сервис»", bold: true },
+            { text: "Юридический адрес: 119021, г. Москва, ул. Льва Толстого, дом 16, пом. 2106", bold: false },
+            { text: "Почтовый адрес: 115035, г. Москва, ул. Садовническая, д. 82, стр. 2", bold: false },
+            { text: "ОГРН: 1167746266819", bold: false },
+            { text: "ИНН: 7713412899, КПП: 770401001", bold: false },
+            { text: "Р/с №: 40702810800020001082", bold: false },
+            { text: "в ПАО Сбербанк", bold: false },
+            { text: "К/с: 30101810400000000225", bold: false },
+            { text: "БИК: 044525225", bold: false },
+            { text: "ОКПО: 00654285", bold: false },
+            { text: "E-mail: milo@elama.ru", bold: false },
+            { text: "", bold: false },
+            { text: "Генеральный директор", bold: false },
+            { text: "", bold: false },
+            { text: "_____________________/Андреев И.Н./", bold: false }
+        ];
+
+        const clientReqsText = [];
+        if (clientRequisites.type === 'ip') {
+            clientReqsText.push({ text: `Клиент: ${clientRequisites.name}`, bold: true });
+            clientReqsText.push({ text: `Юридический адрес: ${clientRequisites.legalAddress}`, bold: false });
+            clientReqsText.push({ text: `Почтовый адрес: ${clientRequisites.postalAddress}`, bold: false });
+            clientReqsText.push({ text: `ОГРНИП: ${clientRequisites.ogrnip}`, bold: false });
+            clientReqsText.push({ text: `ИНН: ${clientRequisites.inn}`, bold: false });
+            clientReqsText.push({ text: `Р/с №: ${clientRequisites.account}`, bold: false });
+            clientReqsText.push({ text: `в ${clientRequisites.bank}`, bold: false });
+            clientReqsText.push({ text: `К/с: ${clientRequisites.correspondent}`, bold: false });
+            clientReqsText.push({ text: `БИК: ${clientRequisites.bik}`, bold: false });
+            clientReqsText.push({ text: `E-mail: ${clientRequisites.email}`, bold: false });
+            clientReqsText.push({ text: "", bold: false });
+            clientReqsText.push({ text: "Индивидуальный предприниматель", bold: false });
+            clientReqsText.push({ text: "", bold: false });
+            const nameParts = clientRequisites.name.split(' ');
+            const surname = nameParts[0] || '';
+            const initials = nameParts.length > 1 ? `${nameParts[1].charAt(0)}.${nameParts[2] ? nameParts[2].charAt(0) + '.' : ''}` : '';
+            clientReqsText.push({ text: `_____________/${surname} ${initials}/`, bold: false });
+        } else {
+            clientReqsText.push({ text: `Клиент: ${clientRequisites.nameShort}`, bold: true });
+            clientReqsText.push({ text: `Юридический адрес: ${clientRequisites.legalAddress}`, bold: false });
+            clientReqsText.push({ text: `Почтовый адрес: ${clientRequisites.postalAddress}`, bold: false });
+            clientReqsText.push({ text: `ОГРН: ${clientRequisites.ogrn}`, bold: false });
+            clientReqsText.push({ text: `ИНН: ${clientRequisites.inn}, КПП: ${clientRequisites.kpp}`, bold: false });
+            clientReqsText.push({ text: `Р/с №: ${clientRequisites.account}`, bold: false });
+            clientReqsText.push({ text: `в ${clientRequisites.bank}`, bold: false });
+            clientReqsText.push({ text: `К/с: ${clientRequisites.correspondent}`, bold: false });
+            clientReqsText.push({ text: `БИК: ${clientRequisites.bik}`, bold: false });
+            clientReqsText.push({ text: `E-mail: ${clientRequisites.email}`, bold: false });
+            clientReqsText.push({ text: "", bold: false });
+            clientReqsText.push({ text: clientRequisites.positionNominative, bold: false });
+            clientReqsText.push({ text: "", bold: false });
+            const nameParts = clientRequisites.directorNominative.split(' ');
+            const surname = nameParts[0] || '';
+            const initials = nameParts.length > 1 ? `${nameParts[1].charAt(0)}.${nameParts[2] ? nameParts[2].charAt(0) + '.' : ''}` : '';
+            clientReqsText.push({ text: `_____________/${surname} ${initials}/`, bold: false });
+        }
+
+        const requisitesTable = new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: { top: borderNone, bottom: borderNone, left: borderNone, right: borderNone },
+            rows: [
+                new TableRow({
+                    children: [
+                        new TableCell({
+                            width: { size: 50, type: WidthType.PERCENTAGE },
+                            borders: { top: borderNone, bottom: borderNone, left: borderNone, right: borderNone },
+                            children: companyRequisites.map(r => new Paragraph({
+                                children: [tr(r.text, r.bold)],
+                                spacing: { after: 50 }
+                            }))
+                        }),
+                        new TableCell({
+                            width: { size: 50, type: WidthType.PERCENTAGE },
+                            borders: { top: borderNone, bottom: borderNone, left: borderNone, right: borderNone },
+                            children: clientReqsText.map(r => new Paragraph({
+                                children: [tr(r.text, r.bold)],
+                                spacing: { after: 50 }
+                            }))
+                        })
+                    ]
+                })
+            ]
+        });
+
+        children.push(requisitesTable);
+
+        const doc = new Document({ sections: [{ properties: {}, children }] });
+        const blob = await Packer.toBlob(doc);
+        saveAs(blob, `ДС по ${contractNum}.docx`);
+    } catch(e) {
+        document.getElementById('err').textContent = "❌ Ошибка: " + e.message;
+        document.getElementById('err').classList.add('show');
+    } finally {
+        btn.textContent = origTxt; btn.disabled = false;
+    }
+}
+
+extractContractDate();
+toggleClientFields();
+</script>
+</body>
+</html>
