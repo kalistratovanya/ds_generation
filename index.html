@@ -650,7 +650,8 @@ async function generateDocx() {
 
         const clientTextParts = [];
         if (clientRequisites.type === 'ip') {
-            clientTextParts.push(tr("Индивидуальный предприниматель ", false));
+            // ИЗМЕНЕНИЕ: "Индивидуальный предприниматель" теперь жирным
+            clientTextParts.push(tr("Индивидуальный предприниматель ", true)); 
             clientTextParts.push(tr(clientRequisites.name, true));
             clientTextParts.push(tr(", именуемый в дальнейшем «", false));
             clientTextParts.push(tr("Клиент", true));
@@ -745,7 +746,6 @@ async function generateDocx() {
 
         const clientReqsText = [];
         if (clientRequisites.type === 'ip') {
-            // ИЗМЕНЕНИЕ ЗДЕСЬ: Добавлено "ИП " перед ФИО
             clientReqsText.push({ text: `Клиент: ИП ${clientRequisites.name}`, bold: true });
             clientReqsText.push({ text: `Юридический адрес: ${clientRequisites.legalAddress}`, bold: false });
             clientReqsText.push({ text: `Почтовый адрес: ${clientRequisites.postalAddress}`, bold: false });
