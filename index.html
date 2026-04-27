@@ -116,6 +116,31 @@
         <button id="addActBtn" class="btn btn-add" onclick="addAct()">➕ Добавить акт</button>
     </div>
 
+    <div class="section" id="returnStatementSection" style="display:none;">
+        <div class="section-title">💰 Заявление на возврат денежных средств</div>
+        <div class="grid">
+            <div class="form-group">
+                <label>Потребуется ли заявление на возврат?</label>
+                <select id="needReturnStatement" onchange="toggleReturnFields()">
+                    <option value="no">Нет</option>
+                    <option value="yes">Да</option>
+                </select>
+            </div>
+        </div>
+        
+        <div id="returnFields" class="grid hidden" style="margin-top:10px;">
+            <div class="form-group" style="grid-column: span 2;">
+                <label>Лицевой счет (ЛСС)</label>
+                <input type="text" id="lssAccount" placeholder="ЛСС-XXXXXXXXXX">
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+                <label>Сумма живых денег (если есть, ₽)</label>
+                <input type="text" id="cashAmount" placeholder="0,00">
+                <div class="hint">Укажите сумму наличных денежных средств, если они возвращаются дополнительно к корректировке</div>
+            </div>
+        </div>
+    </div>
+
     <div class="section" id="clientRequisitesSection" style="display:none;">
         <div class="section-title">📝 Реквизиты клиента</div>
         <div id="oooRequisites" class="grid">
@@ -145,6 +170,7 @@
 
     <button class="btn btn-calc" onclick="calculate()">🧮 Рассчитать всё</button>
     <button class="btn btn-dl" id="btnDl" onclick="generateDocx()" disabled>📥 Скачать документ Word (.docx)</button>
+    <button class="btn btn-dl" id="btnReturnDl" onclick="generateReturnStatement()" style="display:none; background:#f59e0b; margin-top:10px;">📥 Скачать заявление на возврат</button>
     <div class="lib-status" id="libStatus">⏳ Загрузка библиотек...</div>
     <div class="error" id="err"></div>
     <div class="result-box" id="preview"></div>
@@ -240,6 +266,19 @@ function toggleDirectorField() {
     } else {
         otherGen.classList.add('hidden');
         otherNom.classList.add('hidden');
+    }
+}
+
+function toggleReturnFields() {
+    const needReturn = document.getElementById('needReturnStatement').value;
+    const returnFields = document.getElementById('returnFields');
+    const btnReturnDl = document.getElementById('btnReturnDl');
+    
+    if (needReturn === 'yes') {
+        returnFields.classList.remove('hidden');
+    } else {
+        returnFields.classList.add('hidden');
+        btnReturnDl.style.display = 'none';
     }
 }
 
@@ -510,18 +549,47 @@ function calculate() {
             };
         }
 
+        // Данные для заявления на возврат
+        const needReturnStatement = document.getElementById('needReturnStatement').value;
+        const lssAccount = document.getElementById('lssAccount').value.trim();
+        const cashAmount = round2(parseNum(document.getElementById('cashAmount').value));
+        
+        // Расчет общей суммы корректировок
+        const totalAdjustment = acts.reduce((sum, act) => {
+            return sum + act.services.reduce((sSum, s) => sSum + s.adj, 0);
+        }, 0);
+        
+        const totalReturnAmount = round2(totalAdjustment + cashAmount);
+
         calcData = { 
             contractNum, 
             contractDate, 
             clientRequisites,
             moscowDate: new Date().toLocaleDateString('ru-RU'), 
-            acts 
+            acts,
+            needReturnStatement,
+            lssAccount,
+            cashAmount,
+            totalAdjustment,
+            totalReturnAmount
         };
         
         let summary = `✅ Расчёт выполнен\nАктов: ${acts.length}`;
-        acts.forEach(a => summary += `\nАкт № ${a.actNumber} от ${a.actDate} (НДС ${a.vatRate}%): ${fmt(a.orig.incl)} ₽ → ${fmt(a.new.incl)} ₽`);
+        acts.forEach(a => summary += `\nАкт № ${a.actNumber} от ${a.actDate} (НДС ${a.vatRate}%): ${fmt(a.orig.incl)} ₽ → ${fmt(a.new.incl)} ₽`;
+        summary += `\n\nСумма корректировок: ${fmt(totalAdjustment)} ₽`;
+        if(cashAmount > 0) summary += `\nСумма живых денег: ${fmt(cashAmount)} ₽`;
+        summary += `\nИтого к возврату: ${fmt(totalReturnAmount)} ₽`;
+        
         prev.innerHTML = summary;
         prev.classList.add('show'); btn.style.display = 'block'; btn.disabled = false;
+        
+        // Показываем кнопку заявления если нужно
+        const btnReturnDl = document.getElementById('btnReturnDl');
+        if(needReturnStatement === 'yes' && totalReturnAmount > 0) {
+            btnReturnDl.style.display = 'block';
+        } else {
+            btnReturnDl.style.display = 'none';
+        }
     } catch(e) {
         err.textContent = "❌ " + e.message; err.classList.add('show');
     }
@@ -650,7 +718,6 @@ async function generateDocx() {
 
         const clientTextParts = [];
         if (clientRequisites.type === 'ip') {
-            // ИЗМЕНЕНИЕ: "Индивидуальный предприниматель" теперь жирным
             clientTextParts.push(tr("Индивидуальный предприниматель ", true)); 
             clientTextParts.push(tr(clientRequisites.name, true));
             clientTextParts.push(tr(", именуемый в дальнейшем «", false));
@@ -723,6 +790,28 @@ async function generateDocx() {
                 children.push(new Paragraph({ children: [], pageBreakBefore: true }));
             }
         });
+
+        const finalStartNum = acts.length + 1;
+        
+        children.push(new Paragraph({
+            children: [tr(`${finalStartNum}. Вышеперечисленные услуги выполнены полностью и в срок. Заказчик претензий по объему, качеству и срокам оказания услуг не имеет.`)],
+            spacing: { after: 200 }
+        }));
+
+        children.push(new Paragraph({
+            children: [tr(`${finalStartNum + 1}. Все остальные положения Договора остаются неизменными.`)],
+            spacing: { after: 200 }
+        }));
+
+        children.push(new Paragraph({
+            children: [tr(`${finalStartNum + 2}. Настоящее дополнительное соглашение вступает в силу с момента его подписания Сторонами и является неотъемлемой частью Договора.`)],
+            spacing: { after: 200 }
+        }));
+
+        children.push(new Paragraph({
+            children: [tr(`${finalStartNum + 3}. Настоящее дополнительное соглашение составлено в двух экземплярах по одному для каждой Стороны.`)],
+            spacing: { after: 200 }
+        }));
 
         children.push(new Paragraph({ spacing: { before: 200 } }));
 
@@ -815,6 +904,156 @@ async function generateDocx() {
         const doc = new Document({ sections: [{ properties: {}, children }] });
         const blob = await Packer.toBlob(doc);
         saveAs(blob, `ДС по ${contractNum}.docx`);
+    } catch(e) {
+        document.getElementById('err').textContent = "❌ Ошибка: " + e.message;
+        document.getElementById('err').classList.add('show');
+    } finally {
+        btn.textContent = origTxt; btn.disabled = false;
+    }
+}
+
+// === ГЕНЕРАЦИЯ ЗАЯВЛЕНИЯ НА ВОЗВРАТ ===
+async function generateReturnStatement() {
+    if(!calcData || !librariesReady) return;
+    const btn = document.getElementById('btnReturnDl');
+    const origTxt = btn.textContent; btn.textContent = '⏳ Генерация...'; btn.disabled = true;
+
+    try {
+        const { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, TextRun } = window.docx;
+        if(!Document) throw new Error("docx не загружен");
+
+        const { contractNum, clientRequisites, moscowDate, totalReturnAmount, lssAccount, acts } = calcData;
+        
+        const tr = (text, bold=false) => new TextRun({ text, bold, size: 20, font: "Times New Roman" });
+        
+        // Определяем ставку НДС из первого акта
+        const vatRate = acts.length > 0 ? acts[0].vatRate : 20;
+        
+        // Сумма прописью
+        const amountWords = toWords(totalReturnAmount);
+        const rubles = Math.floor(totalReturnAmount);
+        const kopecks = Math.round((totalReturnAmount - rubles) * 100);
+        const amountFormatted = `${rubles} (${toWords(rubles)}) рублей ${kopecks} копеек`;
+
+        const children = [];
+        
+        // Шапка заявления
+        children.push(new Paragraph({ 
+            children: [tr(`Исх. № 1`)],
+            alignment: AlignmentType.RIGHT,
+            spacing: { after: 100 }
+        }));
+        
+        children.push(new Paragraph({ 
+            children: [tr(`от ${moscowDate}`)],
+            alignment: AlignmentType.RIGHT,
+            spacing: { after: 300 }
+        }));
+        
+        children.push(new Paragraph({ 
+            children: [tr("Генеральному директору")],
+            spacing: { after: 50 }
+        }));
+        
+        children.push(new Paragraph({ 
+            children: [tr("ООО «СМБ-сервис»")],
+            spacing: { after: 50 }
+        }));
+        
+        children.push(new Paragraph({ 
+            children: [tr("Андрееву И.Н.")],
+            spacing: { after: 400 }
+        }));
+        
+        // Заголовок
+        children.push(new Paragraph({ 
+            children: [tr("Заявление на возврат денежных средств", true)],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 300 }
+        }));
+        
+        // Текст заявления
+        const clientName = clientRequisites.type === 'ip' ? `ИП ${clientRequisites.name}` : clientRequisites.nameShort;
+        
+        children.push(new Paragraph({
+            children: [
+                tr(`${clientName} просит произвести возврат денежных средств по договору № ${contractNum} в размере `, false),
+                tr(`${amountFormatted}`, true),
+                tr(`, в том числе НДС по ставке ${vatRate}% в соответствии с действующим законодательством, по счету ${lssAccount || 'ЛСС-__________'}.`, false)
+            ],
+            spacing: { after: 300 }
+        }));
+        
+        children.push(new Paragraph({
+            children: [tr("Причина возврата: ДС", false)],
+            spacing: { after: 300 }
+        }));
+        
+        // Реквизиты
+        children.push(new Paragraph({ 
+            children: [tr("Реквизиты", true)],
+            spacing: { after: 100 }
+        }));
+        
+        children.push(new Paragraph({
+            children: [tr(clientName, false)],
+            spacing: { after: 50 }
+        }));
+        
+        children.push(new Paragraph({
+            children: [tr(`ИНН ${clientRequisites.inn}`, false)],
+            spacing: { after: 50 }
+        }));
+        
+        if(clientRequisites.type === 'ooo' && clientRequisites.kpp) {
+            children.push(new Paragraph({
+                children: [tr(`КПП ${clientRequisites.kpp}`, false)],
+                spacing: { after: 50 }
+            }));
+        }
+        
+        children.push(new Paragraph({
+            children: [tr(`Банк ${clientRequisites.bank}`, false)],
+            spacing: { after: 50 }
+        }));
+        
+        children.push(new Paragraph({
+            children: [tr(`р/сч ${clientRequisites.account}`, false)],
+            spacing: { after: 50 }
+        }));
+        
+        children.push(new Paragraph({
+            children: [tr(`кор/сч ${clientRequisites.correspondent}`, false)],
+            spacing: { after: 50 }
+        }));
+        
+        children.push(new Paragraph({
+            children: [tr(`БИК ${clientRequisites.bik}`, false)],
+            spacing: { after: 300 }
+        }));
+        
+        // Подпись
+        const position = clientRequisites.type === 'ip' ? 'Индивидуальный предприниматель' : clientRequisites.positionNominative;
+        const directorName = clientRequisites.type === 'ip' ? clientRequisites.name : clientRequisites.directorNominative;
+        
+        children.push(new Paragraph({
+            children: [tr(position, false)],
+            spacing: { after: 50 }
+        }));
+        
+        children.push(new Paragraph({
+            children: [tr(`_____________ / ${directorName} /`, false)],
+            spacing: { after: 200 }
+        }));
+        
+        children.push(new Paragraph({
+            children: [tr("М.П.", false)],
+            spacing: { after: 100 }
+        }));
+
+        const doc = new Document({ sections: [{ properties: {}, children }] });
+        const blob = await Packer.toBlob(doc);
+        saveAs(blob, `Заявление на возврат ${contractNum}.docx`);
     } catch(e) {
         document.getElementById('err').textContent = "❌ Ошибка: " + e.message;
         document.getElementById('err').classList.add('show');
